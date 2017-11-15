@@ -1,0 +1,80 @@
+---
+title: "Code_ys3006"
+author: "ys3006"
+date: "11/14/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Part I
+```{r}
+library(rpart)
+library(party)
+
+D1 <- read.csv("intelligent_tutor.csv")
+
+
+##Classification Tree: build a classification tree to predict students' action, which students ask a teacher for help, which start a new session, or which give up, based on whether or not the student completed a session (D1$complete) and whether or not they asked for hints (D1$hint.y). 
+
+c.tree <- rpart(action ~ hint.y + complete, method="class", data=D1) 
+
+#Look at the error of this tree
+printcp(c.tree)
+
+#Plot the tree
+post(c.tree, file = "tree.ps", title = "Session Completion Action: 1 - Ask teacher, 2 - Start new session, 3 - Give up")
+
+```
+
+## Part II
+#Regression Tree
+```{r}
+hist(D1$score)
+
+# We want to see if we can build a decision tree to help teachers decide which students to follow up with, based on students' performance in Assistments. 
+
+#Create a categorical outcome variable based on student score to advise the teacher using an "ifelse" statement
+D1$advice <- ifelse(D1$score <=0.4, "intervene", ifelse(D1$score > 0.4 & D1$score <=0.8, "monitor", "no action"))
+```
+
+#Build a decision tree that predicts "advice" based on how many problems students have answered before(prior_prob_count), the percentage of those problems they got correct(prior_percent_correct) and how many hints they required(hints)
+```{r}
+score_ctree <- ctree(factor(advice) ~ prior_prob_count + prior_percent_correct + hints, D1)
+
+#Plot tree
+plot(score_ctree)
+
+# Interpret: ince the global null hypothesis is testing the independence between each variable (hints, prior_prob_count, prior_percent_correct) and outcome (action). The test stops when null hypothesis is failed to reject.
+
+# The p-value under node 1, 2, 5, 6 represents the association between that single input (hints, prior_prob_count, hints, prior_percent_correct corresponded to 1,2,5,6) and outcome (action).
+
+# Since smaller p-value represents high significance, p<0.001 for node 1 and p=0.011 for node 2 are the smallest p-value among 4 nodes(1,2,5,6). Thus, I think the number of hints students required(hints) and the number of problems students have answered before (prior_prob_count) shoud the teacher most closely pay attention to.
+
+# Specifically, since node 7 and node 9 hold the highest bar of "intervene" and "monitor", teacher could pay attention to students who request hints in the current session, and those requested hints together with less than 62.9% the percentage of problems they got correct
+```
+
+
+#Test Tree, predict new data set
+Upload the data "intelligent_tutor_new.csv". This is a data set of a differnt sample of students doing the same problems in the same system. We can use the tree we built for the previous data set to try to predict the "advice" we should give the teacher about these new students. 
+```{r}
+#Upload new data
+D2 <- read.csv("intelligent_tutor_new.csv")
+
+#Generate predicted advice for new students based on tree generated from old students
+D2$prediction <- predict(score_ctree, D2)
+``` 
+
+## Part III
+Compare the predicted advice with the actual advice that these studnts recieved. What is the difference between the observed and predicted results?
+```{r}
+D2$advice <- ifelse(D2$score <=0.4, "intervene", ifelse(D2$score > 0.4 & D2$score <=0.8, "monitor", "no action"))
+# since all scores are equal to 1, which correspond to "no action" advice
+
+(error <- dplyr::count(D2, prediction))
+(error_percent <- 84/(84+116))
+# The prediction error rate is 42%
+```
